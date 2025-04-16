@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"peerpay-b1d2b","appId":"1:800104438753:android:1f5f227ae2c04472d650a0","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"peerpay-b1d2b","configurations":{"android":"1:800104438753:android:1f5f227ae2c04472d650a0","ios":"1:800104438753:ios:b03c43c2fba73228d650a0"}}}}}}
