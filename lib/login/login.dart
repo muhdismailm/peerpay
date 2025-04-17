@@ -1,5 +1,4 @@
 import 'package:expense_tracker/screens/homescreen.dart';
-import 'package:expense_tracker/main.dart';
 import 'package:expense_tracker/login/signup.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
