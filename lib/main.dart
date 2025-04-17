@@ -1,6 +1,6 @@
-import 'package:expense_tracker/homescreen.dart';
-import 'package:expense_tracker/login.dart';
-import 'package:expense_tracker/signup.dart';
+import 'package:expense_tracker/screens/homescreen.dart';
+import 'package:expense_tracker/login/login.dart';
+import 'package:expense_tracker/login/signup.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart'; // Generated file
