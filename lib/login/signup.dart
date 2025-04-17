@@ -18,7 +18,7 @@ class _SignupPageState extends State<SignupPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
@@ -75,7 +75,8 @@ class _SignupPageState extends State<SignupPage> {
     String prefix = fullName.replaceAll(RegExp(r'\s+'), '').toUpperCase().padRight(4, 'X').substring(0, 4);
     String customUid = await _generateUniqueCustomUID(prefix);
 
-    await _firestore.collection('users').doc(user.uid).set({
+    // Set customUid as the Firestore document ID
+    await _firestore.collection('users').doc(customUid).set({
       'uid': user.uid,
       'customUid': customUid,
       'fullName': fullName,
@@ -101,11 +102,10 @@ class _SignupPageState extends State<SignupPage> {
 
       final existing = await _firestore
           .collection('users')
-          .where('customUid', isEqualTo: customUid)
-          .limit(1)
+          .doc(customUid)
           .get();
 
-      if (existing.docs.isEmpty) {
+      if (!existing.exists) {
         break;
       }
     }
@@ -197,7 +197,7 @@ class _SignupPageState extends State<SignupPage> {
                   hint: 'your@email.com',
                   icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (value) => 
+                  validator: (value) =>
                       !value!.contains('@') ? 'Enter valid email' : null,
                   colors: colors,
                 ),
@@ -211,7 +211,7 @@ class _SignupPageState extends State<SignupPage> {
                   obscureText: _obscurePassword,
                   toggleObscure: () => setState(
                       () => _obscurePassword = !_obscurePassword),
-                  validator: (value) => 
+                  validator: (value) =>
                       value!.length < 6 ? 'Minimum 6 characters' : null,
                   colors: colors,
                 ),
@@ -225,7 +225,7 @@ class _SignupPageState extends State<SignupPage> {
                   obscureText: _obscureConfirmPassword,
                   toggleObscure: () => setState(
                       () => _obscureConfirmPassword = !_obscureConfirmPassword),
-                  validator: (value) => value != _passwordController.text 
+                  validator: (value) => value != _passwordController.text
                       ? 'Passwords do not match' : null,
                   colors: colors,
                 ),
@@ -234,7 +234,7 @@ class _SignupPageState extends State<SignupPage> {
                   children: [
                     Checkbox(
                       value: _agreeToTerms,
-                      onChanged: (value) => 
+                      onChanged: (value) =>
                           setState(() => _agreeToTerms = value ?? false),
                       activeColor: colors.primary,
                     ),
