@@ -1,4 +1,4 @@
-import 'package:expense_tracker/login.dart';
+import 'dart:math';
 import 'package:expense_tracker/main.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,16 +13,19 @@ class SignupPage extends StatefulWidget {
 }
 
 class _SignupPageState extends State<SignupPage> {
+  final _formKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _agreeToTerms = false;
   bool _isLoading = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void dispose() {
@@ -34,24 +37,13 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Future<void> _signUp() async {
+    if (!_formKey.currentState!.validate()) return;
     if (!_agreeToTerms) {
       _showToast("Please agree to terms and conditions");
       return;
     }
 
-    if (_passwordController.text != _confirmPasswordController.text) {
-      _showToast("Passwords don't match");
-      return;
-    }
-
-    if (_passwordController.text.length < 6) {
-      _showToast("Password must be at least 6 characters");
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
@@ -61,15 +53,7 @@ class _SignupPageState extends State<SignupPage> {
 
       await userCredential.user?.updateDisplayName(_fullNameController.text.trim());
 
-      // ✅ Store user data in Firestore
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user?.uid)
-          .set({
-        'fullName': _fullNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'createdAt': Timestamp.now(),
-      });
+      await _storeUserData(userCredential.user!);
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -78,24 +62,74 @@ class _SignupPageState extends State<SignupPage> {
         );
       }
     } on FirebaseAuthException catch (e) {
-      String errorMessage = "Sign up failed";
-      if (e.code == 'weak-password') {
-        errorMessage = "The password provided is too weak";
-      } else if (e.code == 'email-already-in-use') {
-        errorMessage = "The account already exists for that email";
-      } else if (e.code == 'invalid-email') {
-        errorMessage = "The email address is invalid";
-      }
-      _showToast(errorMessage);
+      _handleAuthError(e);
     } catch (e) {
       _showToast("An error occurred. Please try again");
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _storeUserData(User user) async {
+    String fullName = _fullNameController.text.trim();
+    String prefix = fullName.replaceAll(RegExp(r'\s+'), '').toUpperCase().padRight(4, 'X').substring(0, 4);
+    String customUid = await _generateUniqueCustomUID(prefix);
+
+    await _firestore.collection('users').doc(user.uid).set({
+      'uid': user.uid,
+      'customUid': customUid,
+      'fullName': fullName,
+      'email': _emailController.text.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastUpdated': FieldValue.serverTimestamp(),
+      'accountStatus': 'active',
+      'profileComplete': false,
+      'preferences': {
+        'theme': 'system',
+        'currency': 'USD',
+      },
+    });
+  }
+
+  Future<String> _generateUniqueCustomUID(String prefix) async {
+    final random = Random();
+    String customUid;
+
+    while (true) {
+      int number = random.nextInt(900) + 100;
+      customUid = '$prefix$number';
+
+      final existing = await _firestore
+          .collection('users')
+          .where('customUid', isEqualTo: customUid)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isEmpty) {
+        break;
       }
     }
+
+    return customUid;
+  }
+
+  void _handleAuthError(FirebaseAuthException e) {
+    String errorMessage = "Sign up failed";
+    switch (e.code) {
+      case 'weak-password':
+        errorMessage = "Password is too weak (min 6 characters)";
+        break;
+      case 'email-already-in-use':
+        errorMessage = "Account already exists for this email";
+        break;
+      case 'invalid-email':
+        errorMessage = "Invalid email address";
+        break;
+      case 'operation-not-allowed':
+        errorMessage = "Email/password accounts are not enabled";
+        break;
+    }
+    _showToast(errorMessage);
   }
 
   void _showToast(String message) {
@@ -110,26 +144,24 @@ class _SignupPageState extends State<SignupPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDarkMode ? Colors.grey[900] : Colors.white;
-    final textColor = isDarkMode ? Colors.white : Colors.black;
-    final secondaryTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
-    final primaryColor = const Color(0xFF5FBB62);
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final colors = _getColors(isDarkMode);
 
     return Scaffold(
-      backgroundColor: isDarkMode ? Colors.black : Colors.grey[100],
+      backgroundColor: colors.scaffoldBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: textColor),
+          icon: Icon(Icons.arrow_back, color: colors.text),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -138,128 +170,99 @@ class _SignupPageState extends State<SignupPage> {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: textColor,
+                    color: colors.text,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Sign up to get started with banking',
+                  'Sign up to get started',
                   style: TextStyle(
                     fontSize: 16,
-                    color: secondaryTextColor,
+                    color: colors.secondaryText,
                   ),
                 ),
                 const SizedBox(height: 32),
-
-                // Full Name
-                _buildInputField(
+                _buildTextFormField(
+                  controller: _fullNameController,
                   label: 'Full Name',
                   hint: 'John Doe',
-                  controller: _fullNameController,
                   icon: Icons.person_outline,
-                  textColor: textColor,
-                  secondaryTextColor: secondaryTextColor,
-                  backgroundColor: backgroundColor!,
-                  isDarkMode: isDarkMode,
+                  validator: (value) => value!.isEmpty ? 'Enter your name' : null,
+                  colors: colors,
                 ),
-
                 const SizedBox(height: 16),
-
-                // Email
-                _buildInputField(
-                  label: 'Email',
-                  hint: 'john@example.com',
+                _buildTextFormField(
                   controller: _emailController,
+                  label: 'Email',
+                  hint: 'your@email.com',
                   icon: Icons.email_outlined,
-                  textColor: textColor,
-                  secondaryTextColor: secondaryTextColor,
-                  backgroundColor: backgroundColor,
-                  isDarkMode: isDarkMode,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) => 
+                      !value!.contains('@') ? 'Enter valid email' : null,
+                  colors: colors,
                 ),
-
                 const SizedBox(height: 16),
-
-                // Password
-                _buildInputField(
-                  label: 'Password',
-                  hint: 'Enter password',
+                _buildTextFormField(
                   controller: _passwordController,
+                  label: 'Password',
+                  hint: 'At least 6 characters',
                   icon: Icons.lock_outline,
                   isPassword: true,
                   obscureText: _obscurePassword,
-                  toggleObscure: () => setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  }),
-                  textColor: textColor,
-                  secondaryTextColor: secondaryTextColor,
-                  backgroundColor: backgroundColor,
-                  isDarkMode: isDarkMode,
+                  toggleObscure: () => setState(
+                      () => _obscurePassword = !_obscurePassword),
+                  validator: (value) => 
+                      value!.length < 6 ? 'Minimum 6 characters' : null,
+                  colors: colors,
                 ),
-
                 const SizedBox(height: 16),
-
-                // Confirm Password
-                _buildInputField(
+                _buildTextFormField(
+                  controller: _confirmPasswordController,
                   label: 'Confirm Password',
                   hint: 'Re-enter password',
-                  controller: _confirmPasswordController,
                   icon: Icons.lock_outline,
                   isPassword: true,
                   obscureText: _obscureConfirmPassword,
-                  toggleObscure: () => setState(() {
-                    _obscureConfirmPassword = !_obscureConfirmPassword;
-                  }),
-                  textColor: textColor,
-                  secondaryTextColor: secondaryTextColor,
-                  backgroundColor: backgroundColor,
-                  isDarkMode: isDarkMode,
+                  toggleObscure: () => setState(
+                      () => _obscureConfirmPassword = !_obscureConfirmPassword),
+                  validator: (value) => value != _passwordController.text 
+                      ? 'Passwords do not match' : null,
+                  colors: colors,
                 ),
-
                 const SizedBox(height: 16),
-
-                // Terms Checkbox
                 Row(
                   children: [
                     Checkbox(
                       value: _agreeToTerms,
-                      onChanged: (value) {
-                        setState(() {
-                          _agreeToTerms = value ?? false;
-                        });
-                      },
+                      onChanged: (value) => 
+                          setState(() => _agreeToTerms = value ?? false),
+                      activeColor: colors.primary,
                     ),
                     Expanded(
                       child: Text(
-                        'I agree to the terms and conditions',
-                        style: TextStyle(color: secondaryTextColor),
+                        'I agree to terms and privacy policy',
+                        style: TextStyle(color: colors.secondaryText),
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 24),
-
-                // Sign Up Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _signUp,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor,
-                      disabledBackgroundColor: primaryColor.withOpacity(0.5),
+                      backgroundColor: colors.primary,
+                      disabledBackgroundColor: colors.primary.withOpacity(0.5),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
                     child: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
+                        ? const CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
                           )
                         : const Text(
                             'Sign Up',
@@ -279,18 +282,17 @@ class _SignupPageState extends State<SignupPage> {
     );
   }
 
-  Widget _buildInputField({
+  Widget _buildTextFormField({
+    required TextEditingController controller,
     required String label,
     required String hint,
-    required TextEditingController controller,
     required IconData icon,
-    required Color textColor,
-    required Color? secondaryTextColor,
-    required Color backgroundColor,
-    required bool isDarkMode,
+    required FormFieldValidator<String> validator,
+    required _FormColors colors,
     bool isPassword = false,
     bool obscureText = false,
     VoidCallback? toggleObscure,
+    TextInputType? keyboardType,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,37 +302,31 @@ class _SignupPageState extends State<SignupPage> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: textColor,
+            color: colors.text,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: backgroundColor,
+            color: colors.fieldBackground,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: isDarkMode
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
-                    )
-                  ],
+            boxShadow: colors.boxShadow,
           ),
-          child: TextField(
+          child: TextFormField(
             controller: controller,
             obscureText: obscureText,
-            style: TextStyle(color: textColor),
+            keyboardType: keyboardType,
+            style: TextStyle(color: colors.text),
+            validator: validator,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: secondaryTextColor),
-              prefixIcon: Icon(icon, color: secondaryTextColor),
+              hintStyle: TextStyle(color: colors.secondaryText),
+              prefixIcon: Icon(icon, color: colors.secondaryText),
               suffixIcon: isPassword
                   ? IconButton(
                       icon: Icon(
                         obscureText ? Icons.visibility_off : Icons.visibility,
-                        color: secondaryTextColor,
+                        color: colors.secondaryText,
                       ),
                       onPressed: toggleObscure,
                     )
@@ -343,4 +339,41 @@ class _SignupPageState extends State<SignupPage> {
       ],
     );
   }
+
+  _FormColors _getColors(bool isDarkMode) {
+    return _FormColors(
+      text: isDarkMode ? Colors.white : Colors.black,
+      secondaryText: isDarkMode ? Colors.grey[400]! : Colors.grey[600]!,
+      primary: const Color(0xFF5FBB62),
+      fieldBackground: isDarkMode ? Colors.grey[900]! : Colors.white,
+      scaffoldBackground: isDarkMode ? Colors.black : Colors.grey[100]!,
+      boxShadow: isDarkMode
+          ? []
+          : [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 5),
+              )
+            ],
+    );
+  }
+}
+
+class _FormColors {
+  final Color text;
+  final Color secondaryText;
+  final Color primary;
+  final Color fieldBackground;
+  final Color scaffoldBackground;
+  final List<BoxShadow> boxShadow;
+
+  _FormColors({
+    required this.text,
+    required this.secondaryText,
+    required this.primary,
+    required this.fieldBackground,
+    required this.scaffoldBackground,
+    required this.boxShadow,
+  });
 }
