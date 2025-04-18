@@ -57,13 +57,12 @@ class _HomeScreenState extends State<HomeScreen> {
           connections = List<String>.from(data['connections'] ?? []);
         });
       } else {
-        print("User document not found for customUid: \$customUid");
         setState(() {
           fullName = 'User';
         });
       }
     } catch (e) {
-      print("Error fetching user data: \$e");
+      print("Error fetching user data: $e");
     }
   }
 
@@ -87,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: TextStyle(color: Colors.red)),
+              child: const Text("Cancel", style: TextStyle(color: Colors.red)),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -218,11 +217,62 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDarkMode ? Colors.grey[900] : Colors.white;
     final textColor = isDarkMode ? Colors.white : Colors.black;
-    final secondaryTextColor =
-        isDarkMode ? Colors.grey[400] : Colors.grey[600];
+    final secondaryTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
 
     return Scaffold(
       backgroundColor: isDarkMode ? Colors.black : Colors.grey[100],
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            UserAccountsDrawerHeader(
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.grey[850] : Colors.green,
+              ),
+              currentAccountPicture: const CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person, size: 40),
+              ),
+              accountName: Text(
+                fullName,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              accountEmail: Text('UID: $customUid'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Home'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profile'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                Navigator.pop(context);
+                // Navigate to login or welcome screen if needed
+              },
+            ),
+          ],
+        ),
+      ),
+      appBar: AppBar(
+        title: Text('Home', style: TextStyle(color: textColor)),
+        backgroundColor: backgroundColor,
+        iconTheme: IconThemeData(color: textColor),
+        elevation: 0,
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -230,43 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const ProfilePage()),
-                      );
-                    },
-                    child:
-                        Icon(Icons.person_2_sharp, size: 50, color: textColor),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: secondaryTextColor,
-                        ),
-                      ),
-                      Text(
-                        fullName,
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 40),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -286,22 +299,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Total Balance',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: secondaryTextColor,
-                      ),
-                    ),
+                    Text('Total Balance',
+                        style: TextStyle(fontSize: 16, color: secondaryTextColor)),
                     const SizedBox(height: 8),
-                    Text(
-                      '\$20,340.98',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                    ),
+                    Text('\$20,340.98',
+                        style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: textColor)),
                   ],
                 ),
               ),
@@ -325,14 +330,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Connections',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
+                      Text('Connections',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: textColor)),
                       const SizedBox(height: 20),
                       ElevatedButton.icon(
                         onPressed: showAddConnectionDialog,
@@ -378,14 +380,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                       context: context,
                                       builder: (context) => AlertDialog(
                                         title: const Text('Remove Connection'),
-                                        content: const Text('Are you sure you want to remove this connection?'),
+                                        content: const Text(
+                                            'Are you sure you want to remove this connection?'),
                                         actions: [
                                           TextButton(
-                                            onPressed: () => Navigator.pop(context, false),
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
                                             child: const Text('Cancel'),
                                           ),
                                           ElevatedButton(
-                                            onPressed: () => Navigator.pop(context, true),
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
                                             child: const Text('Remove'),
                                           ),
                                         ],
