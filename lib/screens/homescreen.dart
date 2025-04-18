@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:expense_tracker/screens/profile.dart';
 import 'package:expense_tracker/screens/connected.dart';
@@ -63,7 +62,44 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print("Error fetching user data: $e");
+      setState(() {
+        fullName = 'User';
+      });
     }
+  }
+
+  Future<void> removeConnection(String targetUserId) async {
+    final currentUserQuery = await FirebaseFirestore.instance
+        .collection('users')
+        .where('customUid', isEqualTo: customUid)
+        .limit(1)
+        .get();
+
+    if (currentUserQuery.docs.isEmpty) return;
+
+    final currentUserId = currentUserQuery.docs.first.id;
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .update({
+      'connections': FieldValue.arrayRemove([targetUserId]),
+    });
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(targetUserId)
+        .update({
+      'connections': FieldValue.arrayRemove([currentUserId]),
+    });
+
+    setState(() {
+      connections.remove(targetUserId);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Connection removed')),
+    );
   }
 
   Future<void> showAddConnectionDialog() async {
@@ -178,46 +214,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> removeConnection(String targetUserId) async {
-    final currentUserQuery = await FirebaseFirestore.instance
-        .collection('users')
-        .where('customUid', isEqualTo: customUid)
-        .limit(1)
-        .get();
-
-    if (currentUserQuery.docs.isEmpty) return;
-
-    final currentUserId = currentUserQuery.docs.first.id;
-
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUserId)
-        .update({
-      'connections': FieldValue.arrayRemove([targetUserId]),
-    });
-
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(targetUserId)
-        .update({
-      'connections': FieldValue.arrayRemove([currentUserId]),
-    });
-
-    setState(() {
-      connections.remove(targetUserId);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Connection removed')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final backgroundColor = isDarkMode ? Colors.grey[900] : Colors.white;
     final textColor = isDarkMode ? Colors.white : Colors.black;
     final secondaryTextColor = isDarkMode ? Colors.grey[400] : Colors.grey[600];
+    final redHover = Colors.red.withOpacity(0.1);
 
     return Scaffold(
       backgroundColor: isDarkMode ? Colors.black : Colors.grey[100],
@@ -291,10 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 5),
               Text(
                 'UID: $customUid',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: secondaryTextColor,
-                ),
+                style: TextStyle(fontSize: 14, color: secondaryTextColor),
               ),
               const SizedBox(height: 20),
               Container(
@@ -329,7 +329,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 30),
               Flexible(
-                fit: FlexFit.loose,
                 child: Container(
                   constraints: BoxConstraints(
                     maxHeight: 300 + (connections.length * 60),
@@ -367,8 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 15),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -383,18 +381,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   .doc(targetUserId)
                                   .get(),
                               builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const CircularProgressIndicator();
+                                if (snapshot.connectionState == ConnectionState.waiting) {
+                                  return const Center(child: CircularProgressIndicator());
                                 }
 
-                                if (!snapshot.hasData ||
-                                    !snapshot.data!.exists) {
+                                if (!snapshot.hasData || !snapshot.data!.exists) {
                                   return const SizedBox.shrink();
                                 }
 
-                                final userData = snapshot.data!.data()
-                                    as Map<String, dynamic>;
+                                final userData = snapshot.data!.data() as Map<String, dynamic>;
+
                                 return GestureDetector(
                                   onTap: () {
                                     Navigator.push(
@@ -408,18 +404,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                     final shouldDelete = await showDialog<bool>(
                                       context: context,
                                       builder: (context) => AlertDialog(
-                                        title: const Text('Remove Connection'),
-                                        content: const Text(
-                                            'Are you sure you want to remove this connection?'),
+                                        backgroundColor: backgroundColor,
+                                        title: Text('Remove Connection',
+                                            style: TextStyle(color: textColor)),
+                                        content: Text(
+                                            'Are you sure you want to remove this connection?',
+                                            style: TextStyle(color: secondaryTextColor)),
                                         actions: [
                                           TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, false),
-                                            child: const Text('Cancel'),
+                                            onPressed: () => Navigator.pop(context, false),
+                                            child: const Text('Cancel',
+                                                style: TextStyle(color: Colors.red)),
                                           ),
                                           ElevatedButton(
-                                            onPressed: () =>
-                                                Navigator.pop(context, true),
+                                            onPressed: () => Navigator.pop(context, true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.green,
+                                              foregroundColor: Colors.white,
+                                            ),
                                             child: const Text('Remove'),
                                           ),
                                         ],
@@ -430,11 +432,67 @@ class _HomeScreenState extends State<HomeScreen> {
                                       await removeConnection(targetUserId);
                                     }
                                   },
-                                  child: ListTile(
-                                    leading: const Icon(Icons.person),
-                                    title:
-                                        Text(userData['fullName'] ?? 'No Name'),
-                                    subtitle: Text(userData['email'] ?? ''),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(12),
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) =>
+                                                  ConnectedPage(userData: userData),
+                                            ),
+                                          );
+                                        },
+                                        onLongPress: () async {
+                                          final shouldDelete = await showDialog<bool>(
+                                            context: context,
+                                            builder: (context) => AlertDialog(
+                                              backgroundColor: backgroundColor,
+                                              title: Text('Remove Connection',
+                                                  style: TextStyle(color: textColor)),
+                                              content: Text(
+                                                  'Are you sure you want to remove this connection?',
+                                                  style: TextStyle(color: secondaryTextColor)),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(context, false),
+                                                  child: const Text('Cancel',
+                                                      style: TextStyle(color: Colors.red)),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () =>
+                                                      Navigator.pop(context, true),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.green,
+                                                    foregroundColor: Colors.white,
+                                                  ),
+                                                  child: const Text('Remove'),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+
+                                          if (shouldDelete == true) {
+                                            await removeConnection(targetUserId);
+                                          }
+                                        },
+                                        splashColor: redHover,
+                                        highlightColor: redHover,
+                                        child: ListTile(
+                                          leading: const Icon(Icons.person),
+                                          title: Text(userData['fullName'] ?? 'No Name'),
+                                          subtitle: Text(userData['email'] ?? ''),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 );
                               },
@@ -458,16 +516,11 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedItemColor: const Color(0xFF5FBB62),
         unselectedItemColor: secondaryTextColor,
         items: const [
-          BottomNavigationBarItem(
-              icon: Icon(Icons.home_rounded), label: 'Home'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.credit_card), label: 'Cards'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.pie_chart), label: 'Stats'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.settings), label: 'Settings'),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.category), label: "Categories"),
+          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: "Stats"),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
-        currentIndex: 0,
       ),
     );
   }
