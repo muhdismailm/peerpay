@@ -1,7 +1,7 @@
-// ignore_for_file: use_build_context_synchronously
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:expense_tracker/screens/profile.dart';
+import 'package:expense_tracker/screens/connected.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -261,16 +261,16 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () async {
                 await FirebaseAuth.instance.signOut();
                 Navigator.pop(context);
-                // Navigate to login or welcome screen if needed
               },
             ),
           ],
         ),
       ),
       appBar: AppBar(
-        title: Text('Home', style: TextStyle(color: textColor)),
-        backgroundColor: backgroundColor,
-        iconTheme: IconThemeData(color: textColor),
+        title: const Text('Home'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
       body: SafeArea(
@@ -279,6 +279,23 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const SizedBox(height: 20),
+              Text(
+                fullName.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                'UID: $customUid',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: secondaryTextColor,
+                ),
+              ),
               const SizedBox(height: 20),
               Container(
                 width: double.infinity,
@@ -311,8 +328,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 30),
-              Expanded(
+              Flexible(
+                fit: FlexFit.loose,
                 child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: 300 + (connections.length * 60),
+                  ),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: backgroundColor,
@@ -375,6 +396,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 final userData = snapshot.data!.data()
                                     as Map<String, dynamic>;
                                 return GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ConnectedPage(userData: userData),
+                                      ),
+                                    );
+                                  },
                                   onLongPress: () async {
                                     final shouldDelete = await showDialog<bool>(
                                       context: context,
