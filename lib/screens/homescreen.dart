@@ -394,11 +394,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return GestureDetector(
                                   onTap: () {
                                     Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => ConnectedPage(userData: userData),
-                                      ),
-                                    );
+  context,
+  MaterialPageRoute(
+    builder: (_) => ConnectedPage(
+      partnerData: userData,
+      currentUserCustomUid: customUid,
+      currentUserName: fullName,
+    ),
+  ),
+);
                                   },
                                   onLongPress: () async {
                                     final shouldDelete = await showDialog<bool>(
@@ -443,12 +447,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                         borderRadius: BorderRadius.circular(12),
                                         onTap: () {
                                           Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) =>
-                                                  ConnectedPage(userData: userData),
-                                            ),
-                                          );
+  context,
+  MaterialPageRoute(
+    builder: (_) => ConnectedPage(
+      partnerData: userData,
+      currentUserCustomUid: customUid,
+      currentUserName: fullName,
+    ),
+  ),
+);
                                         },
                                         onLongPress: () async {
                                           final shouldDelete = await showDialog<bool>(
