@@ -387,7 +387,7 @@ class _ConnectedPageState extends State<ConnectedPage> {
                       netBalance > 0
                           ? '${widget.partnerData['fullName']} owes you'
                           : netBalance < 0
-                              ? 'You owe ${widget.partnerData['fullName']}'
+                              ? 'You own ${widget.partnerData['fullName']}'
                               : 'All settled up',
                       style: TextStyle(color: secondaryTextColor),
                     ),

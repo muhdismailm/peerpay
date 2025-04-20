@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:expense_tracker/screens/profile.dart';
 import 'package:expense_tracker/screens/connected.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -15,11 +18,25 @@ class _HomeScreenState extends State<HomeScreen> {
   String fullName = 'User';
   String customUid = '';
   List<String> connections = [];
+  double grandTotal = 0.0;
+  final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  List<StreamSubscription> _subscriptions = [];
 
   @override
   void initState() {
     super.initState();
-    initializeUser();
+    initializeUser().then((_) {
+      calculateGrandTotal();
+      _setupRealtimeListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    for (var sub in _subscriptions) {
+      sub.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> initializeUser() async {
@@ -33,39 +50,74 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (snapshot.docs.isNotEmpty) {
         final data = snapshot.docs.first.data();
-        customUid = data['customUid'] ?? '';
-        await fetchUserData();
+        setState(() {
+          customUid = data['customUid'] ?? '';
+          fullName = data['fullName'] ?? 'User';
+          connections = List<String>.from(data['connections'] ?? []);
+        });
       }
     }
   }
 
-  Future<void> fetchUserData() async {
-    if (customUid.isEmpty) return;
-
-    try {
-      final docSnapshot = await FirebaseFirestore.instance
+  void _setupRealtimeListeners() {
+    for (String targetUserId in connections) {
+      final subscription = FirebaseFirestore.instance
           .collection('users')
-          .where('customUid', isEqualTo: customUid)
-          .limit(1)
-          .get();
+          .doc(targetUserId)
+          .snapshots()
+          .listen((partnerDoc) async {
+        if (partnerDoc.exists) {
+          final partnerData = partnerDoc.data() as Map<String, dynamic>;
+          final partnerCustomUid = partnerData['customUid'];
+          
+          List<String> uids = [customUid, partnerCustomUid];
+          uids.sort();
+          final channelId = uids.join('_');
 
-      if (docSnapshot.docs.isNotEmpty) {
-        final data = docSnapshot.docs.first.data();
-        setState(() {
-          fullName = data['fullName'] ?? 'User';
-          connections = List<String>.from(data['connections'] ?? []);
-        });
-      } else {
-        setState(() {
-          fullName = 'User';
-        });
-      }
-    } catch (e) {
-      print("Error fetching user data: $e");
-      setState(() {
-        fullName = 'User';
+          _database.child('transactions/$channelId').onValue.listen((event) {
+            calculateGrandTotal();
+          });
+        }
       });
+      _subscriptions.add(subscription);
     }
+  }
+
+  Future<void> calculateGrandTotal() async {
+    double total = 0.0;
+    
+    for (String targetUserId in connections) {
+      final partnerDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(targetUserId)
+          .get();
+      
+      if (partnerDoc.exists) {
+        final partnerData = partnerDoc.data() as Map<String, dynamic>;
+        final partnerCustomUid = partnerData['customUid'];
+        
+        List<String> uids = [customUid, partnerCustomUid];
+        uids.sort();
+        final channelId = uids.join('_');
+        
+        final snapshot = await _database.child('transactions/$channelId').once();
+        final data = snapshot.snapshot.value as Map<dynamic, dynamic>?;
+        
+        if (data != null) {
+          data.forEach((key, value) {
+            if (value['paidBy'] == customUid) {
+              total += (value['amount'] as num).toDouble();
+            } else {
+              total -= (value['amount'] as num).toDouble();
+            }
+          });
+        }
+      }
+    }
+    
+    setState(() {
+      grandTotal = total;
+    });
   }
 
   Future<void> removeConnection(String targetUserId) async {
@@ -96,6 +148,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       connections.remove(targetUserId);
     });
+
+    await calculateGrandTotal();
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Connection removed')),
@@ -196,6 +250,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 setState(() {
                   connections.add(targetUserId);
                 });
+
+                await calculateGrandTotal();
+                _setupRealtimeListeners();
 
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -316,14 +373,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Total Balance',
+                    Text('Grand Total',
                         style: TextStyle(fontSize: 16, color: secondaryTextColor)),
                     const SizedBox(height: 8),
-                    Text('\$20,340.98',
-                        style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: textColor)),
+                    Text(
+                      '₹${grandTotal.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: grandTotal > 0 
+                            ? Colors.green 
+                            : grandTotal < 0 
+                                ? Colors.red 
+                                : textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      grandTotal > 0
+                          ? 'You are owed overall'
+                          : grandTotal < 0
+                              ? 'You owe overall'
+                              : 'All settled up',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: secondaryTextColor,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -394,15 +470,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return GestureDetector(
                                   onTap: () {
                                     Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (_) => ConnectedPage(
-      partnerData: userData,
-      currentUserCustomUid: customUid,
-      currentUserName: fullName,
-    ),
-  ),
-);
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ConnectedPage(
+                                          partnerData: userData,
+                                          currentUserCustomUid: customUid,
+                                          currentUserName: fullName,
+                                        ),
+                                      ),
+                                    );
                                   },
                                   onLongPress: () async {
                                     final shouldDelete = await showDialog<bool>(
@@ -447,15 +523,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                         borderRadius: BorderRadius.circular(12),
                                         onTap: () {
                                           Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (_) => ConnectedPage(
-      partnerData: userData,
-      currentUserCustomUid: customUid,
-      currentUserName: fullName,
-    ),
-  ),
-);
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => ConnectedPage(
+                                                partnerData: userData,
+                                                currentUserCustomUid: customUid,
+                                                currentUserName: fullName,
+                                              ),
+                                            ),
+                                          );
                                         },
                                         onLongPress: () async {
                                           final shouldDelete = await showDialog<bool>(
